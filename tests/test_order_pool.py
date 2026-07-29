@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -90,6 +91,123 @@ def test_blank_lines_are_ignored_and_not_counted_as_raw_records(tmp_path: Path):
 
     assert result.raw_records == 1
     assert result.unique_orders == 1
+
+
+@pytest.mark.parametrize("alias_kind", ["direct", "dotdot", "symlink", "hardlink"])
+def test_raw_and_output_must_not_refer_to_the_same_file(
+    tmp_path: Path, alias_kind: str
+):
+    raw_path = tmp_path / "raw.jsonl"
+    _write_jsonl(
+        raw_path,
+        [
+            _record(
+                "2026-07-29T08:00:00+08:00",
+                [{"orderId": "A-1", "status": "private-status"}],
+            )
+        ],
+    )
+    original = raw_path.read_bytes()
+
+    if alias_kind == "direct":
+        output_path = raw_path
+    elif alias_kind == "dotdot":
+        (tmp_path / "alias").mkdir()
+        output_path = tmp_path / "alias" / ".." / "raw.jsonl"
+    elif alias_kind == "symlink":
+        output_path = tmp_path / "pool-link.json"
+        output_path.symlink_to(raw_path)
+    else:
+        output_path = tmp_path / "pool-hardlink.json"
+        os.link(raw_path, output_path)
+
+    with pytest.raises(OrderPoolError) as exc_info:
+        build_order_pool(raw_path, output_path)
+
+    assert raw_path.read_bytes() == original
+    assert "private-status" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize("order_id", [True, False, 1.5, {}, []])
+def test_order_id_rejects_non_string_and_non_integer_values(
+    tmp_path: Path, order_id: object
+):
+    raw_path = tmp_path / "raw.jsonl"
+    output_path = tmp_path / "order_pool.json"
+    original = b'{"existing":"pool"}\n'
+    _write_jsonl(
+        raw_path,
+        [
+            _record(
+                "2026-07-29T08:00:00+08:00",
+                [{"orderId": order_id, "status": "private-status"}],
+            )
+        ],
+    )
+    output_path.write_bytes(original)
+
+    with pytest.raises(OrderPoolError) as exc_info:
+        build_order_pool(raw_path, output_path)
+
+    assert output_path.read_bytes() == original
+    assert "private-status" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+def test_non_finite_json_constants_are_rejected_without_replacing_pool(
+    tmp_path: Path, constant: str
+):
+    raw_path = tmp_path / "raw.jsonl"
+    output_path = tmp_path / "order_pool.json"
+    original = b'{"existing":"pool"}\n'
+    raw_path.write_text(
+        (
+            '{"captured_at":"2026-07-29T08:00:00+08:00",'
+            '"response":{"result":{"newOrderinfoMains":{"resultList":'
+            f'[{{"orderId":"A-1","privateValue":{constant}}}]'
+            "}}}}\n"
+        ),
+        encoding="utf-8",
+    )
+    output_path.write_bytes(original)
+
+    with pytest.raises(OrderPoolError) as exc_info:
+        build_order_pool(raw_path, output_path)
+
+    assert output_path.read_bytes() == original
+    assert "privateValue" not in str(exc_info.value)
+
+
+def test_non_finite_value_is_rejected_again_during_serialization(
+    monkeypatch, tmp_path: Path
+):
+    raw_path = tmp_path / "raw.jsonl"
+    output_path = tmp_path / "order_pool.json"
+    original = b'{"existing":"pool"}\n'
+    raw_path.write_text("", encoding="utf-8")
+    output_path.write_bytes(original)
+    monkeypatch.setattr(
+        order_pool,
+        "_read_pool",
+        lambda _: (
+            1,
+            {
+                "A-1": {
+                    "first_seen_at": "2026-07-29T08:00:00+08:00",
+                    "order": {"orderId": "A-1", "value": float("nan")},
+                }
+            },
+        ),
+    )
+
+    with pytest.raises(OrderPoolError):
+        build_order_pool(raw_path, output_path)
+
+    assert output_path.read_bytes() == original
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        "order_pool.json",
+        "raw.jsonl",
+    ]
 
 
 @pytest.mark.parametrize(

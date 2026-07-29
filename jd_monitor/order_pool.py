@@ -22,6 +22,10 @@ class PoolBuildResult:
     output_path: Path
 
 
+def _reject_non_finite(value: str) -> None:
+    raise ValueError("non-finite JSON number")
+
+
 def _captured_at(record: object) -> str:
     if not isinstance(record, dict):
         raise OrderPoolError("原始记录格式无效")
@@ -67,13 +71,13 @@ def _read_pool(raw_path: Path) -> tuple[int, dict[str, dict[str, object]]]:
             if not line.strip():
                 continue
             raw_records += 1
-            record = json.loads(line)
+            record = json.loads(line, parse_constant=_reject_non_finite)
             captured_at = _captured_at(record)
             for order in _orders(record):
                 if not isinstance(order, dict):
                     raise OrderPoolError("订单格式无效")
                 order_id = order.get("orderId")
-                if order_id is None or (
+                if type(order_id) not in (str, int) or (
                     isinstance(order_id, str) and not order_id.strip()
                 ):
                     raise OrderPoolError("订单编号无效")
@@ -101,7 +105,7 @@ def _atomic_write(output_path: Path, pool: dict[str, dict[str, object]]) -> None
         temporary_path = Path(temporary_name)
         with os.fdopen(descriptor, "w", encoding="utf-8") as output:
             descriptor = None
-            json.dump(pool, output, ensure_ascii=False, indent=2)
+            json.dump(pool, output, ensure_ascii=False, indent=2, allow_nan=False)
             output.write("\n")
             output.flush()
             os.fsync(output.fileno())
@@ -127,6 +131,12 @@ def build_order_pool(
     output = Path(output_path)
     try:
         raw_records, pool = _read_pool(raw)
+        try:
+            same_file = os.path.samefile(raw, output)
+        except FileNotFoundError:
+            same_file = False
+        if same_file:
+            raise OrderPoolError("原始记录与订单池路径不能指向同一文件")
         _atomic_write(output, pool)
     except OrderPoolError:
         raise
