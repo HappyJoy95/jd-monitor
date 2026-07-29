@@ -27,10 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    try:
-        args = build_parser().parse_args(argv)
-    except SystemExit as exc:
-        return int(exc.code)
+    args = build_parser().parse_args(argv)
 
     if args.command == "capture":
         try:

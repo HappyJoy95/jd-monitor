@@ -1,8 +1,17 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from jd_monitor import __main__ as cli
 from jd_monitor.order_pool import OrderPoolError
+
+
+def test_capture_parser_preserves_default_paths():
+    args = cli.build_parser().parse_args(["capture"])
+
+    assert args.cookies == Path("data/cookies.json")
+    assert args.output == Path("data/raw_order_responses.jsonl")
 
 
 def test_pool_parser_uses_default_paths():
@@ -74,6 +83,8 @@ def test_pool_error_returns_one_without_leaking_details(monkeypatch, capsys):
     assert "SECRET" not in captured.err
 
 
-def test_unknown_command_returns_two(capsys):
-    assert cli.main(["unknown"]) == 2
-    assert "unknown" not in capsys.readouterr().out
+def test_unknown_command_exits_with_status_two():
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["unknown"])
+
+    assert exc_info.value.code == 2
