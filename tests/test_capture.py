@@ -79,6 +79,31 @@ def test_capture_writes_each_page_when_total_count_requires_pagination(tmp_path:
     assert len(output.read_text(encoding="utf-8").splitlines()) == 2
 
 
+def test_capture_result_returns_payloads_without_changing_jsonl(tmp_path: Path):
+    payload = {
+        "code": "0",
+        "result": {"newOrderinfoMains": {"totalCount": 0, "resultList": []}},
+    }
+
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return payload
+
+    class Session:
+        def get(self, url, *, params, timeout):
+            return Response()
+
+    output = tmp_path / "raw.jsonl"
+    result = OrderCapture(Session(), output).capture_once(
+        now=datetime(2026, 7, 29, 13, 44, 53)
+    )
+
+    assert result.payloads == (payload,)
+    assert '"payloads"' not in output.read_text(encoding="utf-8")
+
+
 def test_main_capture_reports_counts_without_response_or_cookie_content(
     monkeypatch, capsys, tmp_path: Path
 ):

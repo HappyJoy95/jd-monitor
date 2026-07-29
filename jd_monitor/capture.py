@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import json
 import math
@@ -30,6 +30,7 @@ class CaptureError(RuntimeError):
 class CaptureResult:
     pages: int
     responses: int
+    payloads: tuple[object, ...] = field(default_factory=tuple, repr=False)
 
 
 def session_from_cookie_file(cookie_path: Path | str) -> requests.Session:
@@ -66,11 +67,18 @@ class OrderCapture:
         first_payload = self._fetch(first_request)
         page_count = self._page_count(first_payload, first_request["page_size"])
         self._append_record(captured_at, first_request, first_payload)
+        payloads = [first_payload]
 
         for page_no in range(2, page_count + 1):
             request = self._request_metadata(captured_at, page_no=page_no)
-            self._append_record(captured_at, request, self._fetch(request))
-        return CaptureResult(pages=page_count, responses=page_count)
+            payload = self._fetch(request)
+            self._append_record(captured_at, request, payload)
+            payloads.append(payload)
+        return CaptureResult(
+            pages=page_count,
+            responses=len(payloads),
+            payloads=tuple(payloads),
+        )
 
     @staticmethod
     def _as_shanghai(now: datetime | None) -> datetime:
