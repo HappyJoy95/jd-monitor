@@ -107,6 +107,13 @@ def _read_cookies(cookie_path: Path) -> list[dict[str, object]]:
     return cookies
 
 
+async def _launch_browser(chromium, *, headless: bool):
+    try:
+        return await chromium.launch(headless=headless)
+    except Exception:
+        return await chromium.launch(headless=headless, channel="msedge")
+
+
 class JdOrderPage:
     """A visible Chromium session used only to read final DOM status text."""
 
@@ -133,8 +140,9 @@ class JdOrderPage:
 
         self._playwright = await async_playwright().start()
         try:
-            self._browser = await self._playwright.chromium.launch(
-                headless=self.headless
+            self._browser = await _launch_browser(
+                self._playwright.chromium,
+                headless=self.headless,
             )
             self._context = await self._browser.new_context()
             await self._context.add_cookies(_read_cookies(self.cookie_path))

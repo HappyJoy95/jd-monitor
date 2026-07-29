@@ -1,9 +1,11 @@
+import asyncio
 from datetime import datetime
 
 import pytest
 
 from jd_monitor.page_verifier import (
     PageStructureError,
+    _launch_browser,
     build_time_window,
     normalize_dom_records,
 )
@@ -50,3 +52,23 @@ def test_build_time_window_matches_api_query_window():
         "dateTimeStarts": "2026-07-29 00:00:00",
         "dateTimeEnds": "2026-07-29 13:44:53",
     }
+
+
+def test_browser_launch_falls_back_to_installed_edge():
+    calls = []
+    expected_browser = object()
+
+    class Chromium:
+        async def launch(self, **options):
+            calls.append(options)
+            if "channel" not in options:
+                raise RuntimeError("bundled browser missing")
+            return expected_browser
+
+    browser = asyncio.run(_launch_browser(Chromium(), headless=False))
+
+    assert browser is expected_browser
+    assert calls == [
+        {"headless": False},
+        {"headless": False, "channel": "msedge"},
+    ]
