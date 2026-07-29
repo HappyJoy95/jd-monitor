@@ -41,8 +41,8 @@ def test_build_order_pool_aggregates_records_and_replaces_duplicate_order(tmp_pa
                     {"orderId": "B-2", "status": "ready"},
                 ],
             ),
-            _record("2026-07-29T08:01:00+08:00", None),
-            {"captured_at": "2026-07-29T08:02:00+08:00", "response": {}},
+            _record("2026-07-29T08:01:00+08:00", []),
+            _record("2026-07-29T08:02:00+08:00", []),
             _record(
                 "2026-07-29T08:03:00+08:00",
                 [
@@ -75,22 +75,24 @@ def test_build_order_pool_aggregates_records_and_replaces_duplicate_order(tmp_pa
     assert output_path.read_bytes().endswith(b"\n")
 
 
-def test_blank_lines_are_ignored_and_not_counted_as_raw_records(tmp_path: Path):
+def test_blank_physical_line_is_rejected_without_replacing_pool(tmp_path: Path):
     raw_path = tmp_path / "raw.jsonl"
     output_path = tmp_path / "order_pool.json"
+    original = b'{"existing":"pool"}\n'
     record = _record(
         "2026-07-29T08:00:00+08:00",
         [{"orderId": "A-1", "status": "new"}],
     )
     raw_path.write_text(
-        "\n  \t\n" + json.dumps(record) + "\n \n",
+        json.dumps(record) + "\n  \t\n",
         encoding="utf-8",
     )
+    output_path.write_bytes(original)
 
-    result = build_order_pool(raw_path, output_path)
+    with pytest.raises(OrderPoolError):
+        build_order_pool(raw_path, output_path)
 
-    assert result.raw_records == 1
-    assert result.unique_orders == 1
+    assert output_path.read_bytes() == original
 
 
 @pytest.mark.parametrize("alias_kind", ["direct", "dotdot", "symlink", "hardlink"])
@@ -272,37 +274,115 @@ def test_invalid_input_does_not_replace_existing_pool(
 @pytest.mark.parametrize(
     "record",
     [
-        {"captured_at": None},
+        ["private-top-level"],
         {"captured_at": "2026-07-29T08:00:00+08:00"},
+        {"captured_at": "2026-07-29T08:00:00+08:00", "response": None},
+        {"captured_at": "2026-07-29T08:00:00+08:00", "response": []},
+        {
+            "captured_at": "2026-07-29T08:00:00+08:00",
+            "response": {"private-response": "missing-result"},
+        },
         {
             "captured_at": "2026-07-29T08:00:00+08:00",
             "response": {"result": None},
         },
         {
             "captured_at": "2026-07-29T08:00:00+08:00",
-            "response": {"result": {}},
+            "response": {"result": []},
+        },
+        {
+            "captured_at": "2026-07-29T08:00:00+08:00",
+            "response": {"result": {"private-result": "missing-main"}},
         },
         {
             "captured_at": "2026-07-29T08:00:00+08:00",
             "response": {"result": {"newOrderinfoMains": None}},
         },
+        {
+            "captured_at": "2026-07-29T08:00:00+08:00",
+            "response": {"result": {"newOrderinfoMains": []}},
+        },
+        {
+            "captured_at": "2026-07-29T08:00:00+08:00",
+            "response": {"result": {"newOrderinfoMains": {}}},
+        },
+        {
+            "captured_at": "2026-07-29T08:00:00+08:00",
+            "response": {
+                "result": {"newOrderinfoMains": {"resultList": None}}
+            },
+        },
+        {
+            "captured_at": "2026-07-29T08:00:00+08:00",
+            "response": {
+                "result": {"newOrderinfoMains": {"resultList": {}}}
+            },
+        },
     ],
 )
-def test_missing_order_path_is_empty_but_captured_at_is_still_validated(
+def test_incomplete_response_path_is_rejected_without_replacing_pool(
     tmp_path: Path, record: object
 ):
     raw_path = tmp_path / "raw.jsonl"
     output_path = tmp_path / "order_pool.json"
+    original = b'{"existing":"pool"}\n'
     _write_jsonl(raw_path, [record])
+    output_path.write_bytes(original)
 
-    if record.get("captured_at") is None:
-        with pytest.raises(OrderPoolError):
-            build_order_pool(raw_path, output_path)
-    else:
-        result = build_order_pool(raw_path, output_path)
-        assert result.raw_records == 1
-        assert result.unique_orders == 0
-        assert json.loads(output_path.read_text(encoding="utf-8")) == {}
+    with pytest.raises(OrderPoolError) as exc_info:
+        build_order_pool(raw_path, output_path)
+
+    assert output_path.read_bytes() == original
+    assert "private" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "captured_at",
+    [
+        "2026-07-29 08:00:00+08:00",
+        "2026-07-29X08:00:00+08:00",
+        "2026-07-29t08:00:00+08:00",
+        "2026-07-29T08:00:00",
+        "2026-07-29T08:00:00Z",
+        "2026-07-29T08:00:00+0800",
+        "2026-07-29T08:00:00+08:99",
+        "2026-07-29T08:00:00.1234567+08:00",
+        "2026-02-30T08:00:00+08:00",
+    ],
+)
+def test_captured_at_rejects_non_capture_format_without_replacing_pool(
+    tmp_path: Path, captured_at: str
+):
+    raw_path = tmp_path / "raw.jsonl"
+    output_path = tmp_path / "order_pool.json"
+    original = b'{"existing":"pool"}\n'
+    _write_jsonl(raw_path, [_record(captured_at, [])])
+    output_path.write_bytes(original)
+
+    with pytest.raises(OrderPoolError):
+        build_order_pool(raw_path, output_path)
+
+    assert output_path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "captured_at",
+    [
+        "2026-07-29T08:00:00.1+08:00",
+        "2026-07-29T08:00:00.123456-05:30",
+    ],
+)
+def test_captured_at_accepts_one_to_six_microsecond_digits(
+    tmp_path: Path, captured_at: str
+):
+    raw_path = tmp_path / "raw.jsonl"
+    output_path = tmp_path / "order_pool.json"
+    _write_jsonl(raw_path, [_record(captured_at, [])])
+
+    result = build_order_pool(raw_path, output_path)
+
+    assert result.raw_records == 1
+    assert result.unique_orders == 0
 
 
 def test_rebuild_is_byte_identical_and_leaves_no_temporary_files(tmp_path: Path):
@@ -312,7 +392,7 @@ def test_rebuild_is_byte_identical_and_leaves_no_temporary_files(tmp_path: Path)
         raw_path,
         [
             _record(
-                "2026-07-29T08:00:00Z",
+                "2026-07-29T08:00:00+00:00",
                 [{"orderId": "订单-1", "customer": "张三"}],
             )
         ],
@@ -327,7 +407,7 @@ def test_rebuild_is_byte_identical_and_leaves_no_temporary_files(tmp_path: Path)
     assert output_path.read_text(encoding="utf-8") == (
         '{\n'
         '  "订单-1": {\n'
-        '    "first_seen_at": "2026-07-29T08:00:00Z",\n'
+        '    "first_seen_at": "2026-07-29T08:00:00+00:00",\n'
         '    "order": {\n'
         '      "orderId": "订单-1",\n'
         '      "customer": "张三"\n'

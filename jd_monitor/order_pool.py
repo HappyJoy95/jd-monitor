@@ -7,8 +7,17 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 from typing import Any
+
+
+CAPTURED_AT_PATTERN = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}"
+    r"T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]{1,6})?"
+    r"[+-](?:[01][0-9]|2[0-3]):[0-5][0-9]"
+)
 
 
 class OrderPoolError(RuntimeError):
@@ -32,6 +41,8 @@ def _captured_at(record: object) -> str:
     value = record.get("captured_at")
     if not isinstance(value, str) or not value.strip():
         raise OrderPoolError("原始记录的采集时间无效")
+    if CAPTURED_AT_PATTERN.fullmatch(value) is None:
+        raise OrderPoolError("原始记录的采集时间无效")
     try:
         parsed = datetime.fromisoformat(value)
         offset = parsed.utcoffset()
@@ -45,19 +56,15 @@ def _captured_at(record: object) -> str:
 def _orders(record: dict[str, Any]) -> list[object]:
     current: object = record
     for key in ("response", "result", "newOrderinfoMains"):
-        if not isinstance(current, dict):
-            if current is None:
-                return []
+        if not isinstance(current, dict) or key not in current:
             raise OrderPoolError("原始记录的响应结构无效")
-        if key not in current or current[key] is None:
-            return []
         current = current[key]
 
     if not isinstance(current, dict):
         raise OrderPoolError("原始记录的响应结构无效")
-    result_list = current.get("resultList")
-    if result_list is None:
-        return []
+    if "resultList" not in current:
+        raise OrderPoolError("订单列表格式无效")
+    result_list = current["resultList"]
     if not isinstance(result_list, list):
         raise OrderPoolError("订单列表格式无效")
     return result_list
@@ -69,7 +76,7 @@ def _read_pool(raw_path: Path) -> tuple[int, dict[str, dict[str, object]]]:
     with raw_path.open("r", encoding="utf-8") as raw_file:
         for line in raw_file:
             if not line.strip():
-                continue
+                raise OrderPoolError("原始记录包含空白行")
             raw_records += 1
             record = json.loads(line, parse_constant=_reject_non_finite)
             captured_at = _captured_at(record)
