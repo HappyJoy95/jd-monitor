@@ -26,3 +26,24 @@ python -m jd_monitor capture --cookies data/cookies.json --output data/raw_order
 - 下单结束时间：本次采集时间
 - 预计送达开始时间：当天 `00:00:00`
 - 预计送达结束时间：当天 `23:59:59`
+
+## 订单池
+
+每次执行 `capture` 后，工具都会读取完整的原始日志，并在同一目录重新构建 `order_pool.json`。订单池以订单号作为顶层键；每个订单项包含：
+
+- `first_seen_at`：该订单首次出现在原始日志中的具体时间。
+- `order`：该订单最新一次出现时的完整京东原始对象。重复出现的订单只会覆盖 `order`，不会改变 `first_seen_at`。
+
+也可以独立重建订单池：
+
+```bash
+python -m jd_monitor pool
+```
+
+显式指定原始日志与订单池输出位置：
+
+```bash
+python -m jd_monitor pool --input data/raw_order_responses.jsonl --output data/order_pool.json
+```
+
+`raw_order_responses.jsonl` 和 `order_pool.json` 都包含完整的客户与订单信息，只能保存在本机：不得提交到 Git，也不得发送到聊天、邮件或其他外部渠道。
