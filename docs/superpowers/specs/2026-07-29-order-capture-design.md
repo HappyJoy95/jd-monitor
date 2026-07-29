@@ -19,7 +19,7 @@
 - `desc=true`
 - `startTimeQuery`：当天 00:00:00
 - `endTimeQuery`：本轮抓取开始时间
-- `preStartDeliveryTime`：本轮抓取开始时间
+- `preStartDeliveryTime`：当天 00:00:00
 - `preEndDeliveryTime`：当天 23:59:59
 - `stationNo`：空字符串，沿用当前账号可见门店范围
 
@@ -54,7 +54,7 @@ Cookie、完整请求头和订单数据均不得写入应用运行日志、提�
       "page_size": 50,
       "start_time_query": "2026-07-29 00:00:00",
       "end_time_query": "2026-07-29 13:44:53",
-      "pre_start_delivery_time": "2026-07-29 13:44:53",
+      "pre_start_delivery_time": "2026-07-29 00:00:00",
       "pre_end_delivery_time": "2026-07-29 23:59:59",
       "station_no": ""
     },

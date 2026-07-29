@@ -89,7 +89,7 @@ class OrderCapture:
             "page_size": 50,
             "start_time_query": format_time(start_of_day),
             "end_time_query": format_time(now),
-            "pre_start_delivery_time": format_time(now),
+            "pre_start_delivery_time": format_time(start_of_day),
             "pre_end_delivery_time": format_time(end_of_day),
             "station_no": "",
         }

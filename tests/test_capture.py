@@ -28,7 +28,7 @@ def test_capture_appends_unmodified_response_with_request_metadata(tmp_path: Pat
     assert result.responses == 1
     assert captured[0]["params"]["endTimeQuery"] == "2026-07-29 13:44:53"
     assert output.read_text(encoding="utf-8").splitlines() == [
-        '{"captured_at":"2026-07-29T13:44:53+08:00","request":{"page_no":1,"page_size":50,"start_time_query":"2026-07-29 00:00:00","end_time_query":"2026-07-29 13:44:53","pre_start_delivery_time":"2026-07-29 13:44:53","pre_end_delivery_time":"2026-07-29 23:59:59","station_no":""},"response":{"code":"0","result":{"orders":["unchanged"]}}}'
+        '{"captured_at":"2026-07-29T13:44:53+08:00","request":{"page_no":1,"page_size":50,"start_time_query":"2026-07-29 00:00:00","end_time_query":"2026-07-29 13:44:53","pre_start_delivery_time":"2026-07-29 00:00:00","pre_end_delivery_time":"2026-07-29 23:59:59","station_no":""},"response":{"code":"0","result":{"orders":["unchanged"]}}}'
     ]
 
 
