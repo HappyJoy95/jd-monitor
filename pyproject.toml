@@ -2,7 +2,7 @@
 name = "jd-monitor"
 version = "0.1.0"
 requires-python = ">=3.9"
-dependencies = ["requests>=2.31"]
+dependencies = ["requests>=2.31", "playwright>=1.54"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
