@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 from jd_monitor.capture import OrderCapture, session_from_cookie_file
 from jd_monitor.__main__ import main
@@ -82,6 +83,8 @@ def test_capture_writes_each_page_when_total_count_requires_pagination(tmp_path:
 def test_main_capture_reports_counts_without_response_or_cookie_content(
     monkeypatch, capsys, tmp_path: Path
 ):
+    pool_path = tmp_path / "pool.json"
+
     class FakeCapture:
         def __init__(self, session, output_path):
             assert session is not None
@@ -96,12 +99,24 @@ def test_main_capture_reports_counts_without_response_or_cookie_content(
 
     monkeypatch.setattr("jd_monitor.__main__.session_from_cookie_file", lambda _: object())
     monkeypatch.setattr("jd_monitor.__main__.OrderCapture", FakeCapture)
+    monkeypatch.setattr(
+        "jd_monitor.__main__.build_order_pool",
+        lambda raw_path, output_path: SimpleNamespace(
+            unique_orders=3,
+            output_path=output_path,
+        ),
+    )
 
     exit_code = main([
         "capture",
         "--cookies", str(tmp_path / "cookies.json"),
         "--output", str(tmp_path / "raw.jsonl"),
+        "--pool", str(pool_path),
     ])
 
     assert exit_code == 0
-    assert capsys.readouterr().out == "采集完成：2 页，2 个响应。\n"
+    captured = capsys.readouterr()
+    assert captured.out == (
+        f"采集完成：2 页，2 个响应；订单池 3 笔，已写入 {pool_path}。\n"
+    )
+    assert captured.err == ""

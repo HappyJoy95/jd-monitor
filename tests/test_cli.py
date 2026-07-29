@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from jd_monitor import __main__ as cli
+from jd_monitor.capture import CaptureError
 from jd_monitor.order_pool import OrderPoolError
 
 
@@ -12,6 +13,123 @@ def test_capture_parser_preserves_default_paths():
 
     assert args.cookies == Path("data/cookies.json")
     assert args.output == Path("data/raw_order_responses.jsonl")
+    assert args.pool is None
+
+
+def test_capture_refreshes_explicit_pool_after_capture(monkeypatch, tmp_path: Path):
+    raw_path = tmp_path / "raw.jsonl"
+    pool_path = tmp_path / "custom-pool.json"
+    calls = []
+
+    class FakeCapture:
+        def __init__(self, _session, output_path):
+            assert output_path == raw_path
+
+        def capture_once(self):
+            calls.append(("capture", raw_path))
+            return SimpleNamespace(pages=2, responses=2)
+
+    def fake_build_order_pool(input_path, output_path):
+        calls.append(("pool", input_path, output_path))
+        return SimpleNamespace(unique_orders=4, output_path=output_path)
+
+    monkeypatch.setattr(cli, "session_from_cookie_file", lambda _: object())
+    monkeypatch.setattr(cli, "OrderCapture", FakeCapture)
+    monkeypatch.setattr(cli, "build_order_pool", fake_build_order_pool)
+
+    assert cli.main([
+        "capture",
+        "--output",
+        str(raw_path),
+        "--pool",
+        str(pool_path),
+    ]) == 0
+    assert calls == [
+        ("capture", raw_path),
+        ("pool", raw_path, pool_path),
+    ]
+
+
+def test_capture_defaults_pool_to_raw_file_directory(monkeypatch, tmp_path: Path):
+    raw_path = tmp_path / "custom" / "events.jsonl"
+    calls = []
+
+    class FakeCapture:
+        def __init__(self, _session, _output_path):
+            pass
+
+        def capture_once(self):
+            return SimpleNamespace(pages=1, responses=1)
+
+    def fake_build_order_pool(input_path, output_path):
+        calls.append((input_path, output_path))
+        return SimpleNamespace(unique_orders=0, output_path=output_path)
+
+    monkeypatch.setattr(cli, "session_from_cookie_file", lambda _: object())
+    monkeypatch.setattr(cli, "OrderCapture", FakeCapture)
+    monkeypatch.setattr(cli, "build_order_pool", fake_build_order_pool)
+
+    assert cli.main(["capture", "--output", str(raw_path)]) == 0
+    assert calls == [(raw_path, raw_path.with_name("order_pool.json"))]
+
+
+def test_capture_pool_error_preserves_raw_log_and_hides_details(
+    monkeypatch, capsys, tmp_path: Path
+):
+    raw_path = tmp_path / "raw.jsonl"
+
+    class FakeCapture:
+        def __init__(self, _session, output_path):
+            self.output_path = output_path
+
+        def capture_once(self):
+            self.output_path.write_text("saved raw\n", encoding="utf-8")
+            return SimpleNamespace(pages=1, responses=1)
+
+    def fail_pool(input_path, _output_path):
+        assert input_path.read_text(encoding="utf-8") == "saved raw\n"
+        raise OrderPoolError("SECRET")
+
+    monkeypatch.setattr(cli, "session_from_cookie_file", lambda _: object())
+    monkeypatch.setattr(cli, "OrderCapture", FakeCapture)
+    monkeypatch.setattr(cli, "build_order_pool", fail_pool)
+
+    assert cli.main(["capture", "--output", str(raw_path)]) == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        "采集已保存，但订单池更新失败：请检查原始日志格式和输出目录。\n"
+    )
+    assert "SECRET" not in captured.err
+    assert raw_path.read_text(encoding="utf-8") == "saved raw\n"
+
+
+def test_capture_error_does_not_refresh_pool(monkeypatch, capsys):
+    class FakeCapture:
+        def __init__(self, _session, _output_path):
+            pass
+
+        def capture_once(self):
+            raise CaptureError("SECRET")
+
+    pool_called = False
+
+    def build_pool_should_not_run(_input_path, _output_path):
+        nonlocal pool_called
+        pool_called = True
+
+    monkeypatch.setattr(cli, "session_from_cookie_file", lambda _: object())
+    monkeypatch.setattr(cli, "OrderCapture", FakeCapture)
+    monkeypatch.setattr(cli, "build_order_pool", build_pool_should_not_run)
+
+    assert cli.main(["capture"]) == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "采集失败：请检查登录状态、Cookie 文件和网络连接。\n"
+    assert "SECRET" not in captured.err
+    assert pool_called is False
 
 
 def test_pool_parser_uses_default_paths():

@@ -18,6 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument(
         "--output", type=Path, default=Path("data/raw_order_responses.jsonl")
     )
+    capture.add_argument("--pool", type=Path, default=None)
     pool = commands.add_parser("pool", help="从原始日志重建订单池")
     pool.add_argument(
         "--input", type=Path, default=Path("data/raw_order_responses.jsonl")
@@ -26,22 +27,39 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _run_capture(args: argparse.Namespace) -> int:
+    try:
+        session = session_from_cookie_file(args.cookies)
+        capture_result = OrderCapture(session, args.output).capture_once()
+    except CaptureError:
+        print(
+            "采集失败：请检查登录状态、Cookie 文件和网络连接。",
+            file=sys.stderr,
+        )
+        return 1
+
+    pool_path = args.pool or args.output.with_name("order_pool.json")
+    try:
+        pool_result = build_order_pool(args.output, pool_path)
+    except OrderPoolError:
+        print(
+            "采集已保存，但订单池更新失败：请检查原始日志格式和输出目录。",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        f"采集完成：{capture_result.pages} 页，{capture_result.responses} 个响应；"
+        f"订单池 {pool_result.unique_orders} 笔，已写入 {pool_result.output_path}。"
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.command == "capture":
-        try:
-            session = session_from_cookie_file(args.cookies)
-            result = OrderCapture(session, args.output).capture_once()
-        except CaptureError:
-            print(
-                "采集失败：请检查登录状态、Cookie 文件和网络连接。",
-                file=sys.stderr,
-            )
-            return 1
-
-        print(f"采集完成：{result.pages} 页，{result.responses} 个响应。")
-        return 0
+        return _run_capture(args)
 
     if args.command == "pool":
         try:
