@@ -74,6 +74,24 @@ def test_build_order_pool_aggregates_records_and_replaces_duplicate_order(tmp_pa
     assert output_path.read_bytes().endswith(b"\n")
 
 
+def test_blank_lines_are_ignored_and_not_counted_as_raw_records(tmp_path: Path):
+    raw_path = tmp_path / "raw.jsonl"
+    output_path = tmp_path / "order_pool.json"
+    record = _record(
+        "2026-07-29T08:00:00+08:00",
+        [{"orderId": "A-1", "status": "new"}],
+    )
+    raw_path.write_text(
+        "\n  \t\n" + json.dumps(record) + "\n \n",
+        encoding="utf-8",
+    )
+
+    result = build_order_pool(raw_path, output_path)
+
+    assert result.raw_records == 1
+    assert result.unique_orders == 1
+
+
 @pytest.mark.parametrize(
     ("raw_text", "secret"),
     [

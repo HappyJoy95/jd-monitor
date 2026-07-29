@@ -64,6 +64,8 @@ def _read_pool(raw_path: Path) -> tuple[int, dict[str, dict[str, object]]]:
     pool: dict[str, dict[str, object]] = {}
     with raw_path.open("r", encoding="utf-8") as raw_file:
         for line in raw_file:
+            if not line.strip():
+                continue
             raw_records += 1
             record = json.loads(line)
             captured_at = _captured_at(record)
