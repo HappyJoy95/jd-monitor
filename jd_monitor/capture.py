@@ -12,7 +12,11 @@ from zoneinfo import ZoneInfo
 import requests
 
 
-ORDER_LIST_URL = "https://order.jddj.com/order/newManager/tabQuery/all"
+ORDER_LIST_URLS = (
+    ("waitAccept", "https://order.jddj.com/order/newManager/tabQuery/waitAccept"),
+    ("waitPrint", "https://order.jddj.com/order/newManager/tabQuery/waitPrint"),
+    ("waitMake", "https://order.jddj.com/order/newManager/tabQuery/waitMake"),
+)
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 DEFAULT_HEADERS = {
     "Accept": "application/json, text/javascript, */*; q=0.01",
@@ -30,6 +34,7 @@ class CaptureError(RuntimeError):
 class CaptureResult:
     pages: int
     responses: int
+    orders: tuple[dict[str, object], ...] = ()
 
 
 def session_from_cookie_file(cookie_path: Path | str) -> requests.Session:
@@ -62,15 +67,33 @@ class OrderCapture:
 
     def capture_once(self, now: datetime | None = None) -> CaptureResult:
         captured_at = self._as_shanghai(now)
-        first_request = self._request_metadata(captured_at, page_no=1)
-        first_payload = self._fetch(first_request)
-        page_count = self._page_count(first_payload, first_request["page_size"])
-        self._append_record(captured_at, first_request, first_payload)
+        pages = 0
+        responses = 0
+        current_orders: list[dict[str, object]] = []
+        for tab, url in ORDER_LIST_URLS:
+            first_request = self._request_metadata(tab, page_no=1)
+            first_payload = self._fetch(url, first_request)
+            page_count = self._page_count(first_payload, first_request["page_size"])
+            self._append_record(captured_at, first_request, first_payload)
+            current_orders.extend(self._orders(first_payload))
+            pages += page_count
+            responses += 1
 
-        for page_no in range(2, page_count + 1):
-            request = self._request_metadata(captured_at, page_no=page_no)
-            self._append_record(captured_at, request, self._fetch(request))
-        return CaptureResult(pages=page_count, responses=page_count)
+            for page_no in range(2, page_count + 1):
+                request = self._request_metadata(tab, page_no=page_no)
+                payload = self._fetch(url, request)
+                self._append_record(captured_at, request, payload)
+                current_orders.extend(self._orders(payload))
+                responses += 1
+        return CaptureResult(pages=pages, responses=responses, orders=tuple(current_orders))
+
+    @staticmethod
+    def _orders(payload: object) -> list[dict[str, object]]:
+        try:
+            rows = payload["result"]["newOrderinfoMains"]["resultList"]
+            return [row for row in rows if isinstance(row, dict)]
+        except (KeyError, TypeError):
+            return []
 
     @staticmethod
     def _as_shanghai(now: datetime | None) -> datetime:
@@ -80,24 +103,17 @@ class OrderCapture:
         return value.astimezone(SHANGHAI)
 
     @staticmethod
-    def _request_metadata(now: datetime, page_no: int) -> dict[str, object]:
-        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_day = now.replace(hour=23, minute=59, second=59, microsecond=0)
-        format_time = lambda value: value.strftime("%Y-%m-%d %H:%M:%S")
+    def _request_metadata(tab: str, page_no: int) -> dict[str, object]:
         return {
+            "tab": tab,
             "page_no": page_no,
             "page_size": 50,
-            "start_time_query": format_time(start_of_day),
-            "end_time_query": format_time(now),
-            "pre_start_delivery_time": format_time(start_of_day),
-            "pre_end_delivery_time": format_time(end_of_day),
-            "station_no": "",
         }
 
-    def _fetch(self, request: dict[str, object]) -> object:
+    def _fetch(self, url: str, request: dict[str, object]) -> object:
         try:
             response = self.session.get(
-                ORDER_LIST_URL,
+                url,
                 params=self._query_params(request),
                 timeout=15,
             )
@@ -138,11 +154,6 @@ class OrderCapture:
             "pageSize": request["page_size"],
             "orderBy": "",
             "desc": "true",
-            "preStartDeliveryTime": request["pre_start_delivery_time"],
-            "preEndDeliveryTime": request["pre_end_delivery_time"],
-            "startTimeQuery": request["start_time_query"],
-            "endTimeQuery": request["end_time_query"],
-            "stationNo": request["station_no"],
         }
 
     def _append(self, record: dict[str, object]) -> None:

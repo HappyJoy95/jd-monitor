@@ -29,13 +29,13 @@ def test_capture_refreshes_explicit_pool_after_capture(monkeypatch, tmp_path: Pa
             calls.append(("capture", raw_path))
             return SimpleNamespace(pages=2, responses=2)
 
-    def fake_build_order_pool(input_path, output_path):
-        calls.append(("pool", input_path, output_path))
+    def fake_build_current_order_pool(orders, output_path):
+        calls.append(("pool", orders, output_path))
         return SimpleNamespace(unique_orders=4, output_path=output_path)
 
     monkeypatch.setattr(cli, "session_from_cookie_file", lambda _: object())
     monkeypatch.setattr(cli, "OrderCapture", FakeCapture)
-    monkeypatch.setattr(cli, "build_order_pool", fake_build_order_pool)
+    monkeypatch.setattr(cli, "build_current_order_pool", fake_build_current_order_pool)
 
     assert cli.main([
         "capture",
@@ -46,7 +46,7 @@ def test_capture_refreshes_explicit_pool_after_capture(monkeypatch, tmp_path: Pa
     ]) == 0
     assert calls == [
         ("capture", raw_path),
-        ("pool", raw_path, pool_path),
+        ("pool", (), pool_path),
     ]
 
 
@@ -61,16 +61,16 @@ def test_capture_defaults_pool_to_raw_file_directory(monkeypatch, tmp_path: Path
         def capture_once(self):
             return SimpleNamespace(pages=1, responses=1)
 
-    def fake_build_order_pool(input_path, output_path):
-        calls.append((input_path, output_path))
+    def fake_build_current_order_pool(orders, output_path):
+        calls.append((orders, output_path))
         return SimpleNamespace(unique_orders=0, output_path=output_path)
 
     monkeypatch.setattr(cli, "session_from_cookie_file", lambda _: object())
     monkeypatch.setattr(cli, "OrderCapture", FakeCapture)
-    monkeypatch.setattr(cli, "build_order_pool", fake_build_order_pool)
+    monkeypatch.setattr(cli, "build_current_order_pool", fake_build_current_order_pool)
 
     assert cli.main(["capture", "--output", str(raw_path)]) == 0
-    assert calls == [(raw_path, raw_path.with_name("order_pool.json"))]
+    assert calls == [((), raw_path.with_name("order_pool.json"))]
 
 
 def test_capture_pool_error_preserves_raw_log_and_hides_details(
@@ -86,13 +86,12 @@ def test_capture_pool_error_preserves_raw_log_and_hides_details(
             self.output_path.write_text("saved raw\n", encoding="utf-8")
             return SimpleNamespace(pages=1, responses=1)
 
-    def fail_pool(input_path, _output_path):
-        assert input_path.read_text(encoding="utf-8") == "saved raw\n"
+    def fail_pool(_orders, _output_path):
         raise OrderPoolError("SECRET")
 
     monkeypatch.setattr(cli, "session_from_cookie_file", lambda _: object())
     monkeypatch.setattr(cli, "OrderCapture", FakeCapture)
-    monkeypatch.setattr(cli, "build_order_pool", fail_pool)
+    monkeypatch.setattr(cli, "build_current_order_pool", fail_pool)
 
     assert cli.main(["capture", "--output", str(raw_path)]) == 1
 

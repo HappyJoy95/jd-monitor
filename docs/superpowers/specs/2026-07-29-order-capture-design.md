@@ -6,24 +6,21 @@
 
 ## 数据源
 
-使用商家订单网页的同源 GET 请求：
+使用商家拣货助手网页的以下同源 GET 请求：
 
-`https://order.jddj.com/order/newManager/tabQuery/all`
+- `https://order.jddj.com/order/newManager/tabQuery/waitAccept`
+- `https://order.jddj.com/order/newManager/tabQuery/waitPrint`
+- `https://order.jddj.com/order/newManager/tabQuery/waitMake`
 
-每轮请求动态生成以下参数，使用 Asia/Shanghai 时区：
+每轮分别请求这三个进行中状态，并分页保存各自的结果。每个请求使用以下参数：
 
 - `o2oOrderType=10000`
 - `pageNo`：从 1 开始的页码
 - `pageSize=50`
 - `orderBy`：空字符串
 - `desc=true`
-- `startTimeQuery`：当天 00:00:00
-- `endTimeQuery`：本轮抓取开始时间
-- `preStartDeliveryTime`：当天 00:00:00
-- `preEndDeliveryTime`：当天 23:59:59
-- `stationNo`：空字符串，沿用当前账号可见门店范围
 
-时间参数在每轮重新计算，不复用网页中曾出现过的固定历史时间。若响应表明存在下一页，依次请求并保存每个页面的原始响应。
+接口不使用日期筛选，避免 `all` 的当天时间范围排除仍在处理中的订单。若响应表明存在下一页，依次请求并保存每个页面的原始响应。每条记录的请求元数据包含 `tab`，用以区分来源状态。
 
 ## 认证与请求
 

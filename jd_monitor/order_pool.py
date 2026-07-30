@@ -154,3 +154,23 @@ def build_order_pool(
         unique_orders=len(pool),
         output_path=output,
     )
+
+
+def build_current_order_pool(
+    orders: list[dict[str, object]] | tuple[dict[str, object], ...],
+    output_path: Path | str,
+) -> PoolBuildResult:
+    """Replace the pool with orders observed in the current capture only."""
+    now = datetime.now().astimezone().isoformat()
+    pool: dict[str, dict[str, object]] = {}
+    for order in orders:
+        order_id = order.get("orderId")
+        if type(order_id) not in (str, int) or not str(order_id).strip():
+            continue
+        pool[str(order_id)] = {"first_seen_at": now, "order": order}
+    output = Path(output_path)
+    try:
+        _atomic_write(output, pool)
+    except Exception as exc:
+        raise OrderPoolError("无法构建实时订单池") from exc
+    return PoolBuildResult(raw_records=0, unique_orders=len(pool), output_path=output)
