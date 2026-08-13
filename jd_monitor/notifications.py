@@ -9,6 +9,7 @@ from pathlib import Path
 import json
 
 from .wechat_webhook import WechatWebhookClient, load_webhook_url
+from .store_notifications import load_store_configs, send_to_store_groups
 
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -75,11 +76,31 @@ def format_notification(order: dict[str, object], title: str) -> str:
     )
 
 
-def process_notifications(orders: list[tuple[dict[str, object], str]] | tuple[dict[str, object], str], webhook_path: Path | str, now: datetime | None = None) -> tuple[int, int]:
+def process_notifications(
+    orders: list[tuple[dict[str, object], str]] | tuple[dict[str, object], str],
+    webhook_path: Path | str,
+    now: datetime | None = None,
+    store_notify: bool = True,
+    store_configs_path: Path | str | None = None,
+) -> tuple[int, int, int, int]:
     current = now or datetime.now(SHANGHAI)
     pool = {str(index): {"order": order, "tab": tab} for index, (order, tab) in enumerate(orders)}
     eligible = eligible_orders(pool, set(), current)
     client = WechatWebhookClient(load_webhook_url(Path(webhook_path)))
+    main_attempted = main_sent = 0
     for order, tab in eligible:
-        client.send_text(format_notification(order, notification_type(order, current, tab) or "订单提醒"))
-    return len(eligible), len(eligible)
+        try:
+            client.send_text(format_notification(order, notification_type(order, current, tab) or "订单提醒"))
+            main_sent += 1
+        except Exception:
+            pass
+        main_attempted += 1
+
+    store_attempted = store_sent = 0
+    if store_notify and store_configs_path:
+        store_configs = load_store_configs(store_configs_path)
+        store_attempted, store_sent = send_to_store_groups(
+            eligible, store_configs, current, notification_type
+        )
+
+    return main_attempted, main_sent, store_attempted, store_sent

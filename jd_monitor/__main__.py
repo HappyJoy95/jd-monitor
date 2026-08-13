@@ -21,6 +21,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     capture.add_argument("--pool", type=Path, default=None)
     capture.add_argument("--webhook", type=Path, default=None)
+    capture.add_argument("--no-store-notify", action="store_true", help="禁用门店群推送")
+    capture.add_argument("--store-config", type=Path, default=Path("config/store_webhooks.json"), help="门店 webhook 配置文件路径")
     pool = commands.add_parser("pool", help="从原始日志重建订单池")
     pool.add_argument(
         "--input", type=Path, default=Path("data/raw_order_responses.jsonl")
@@ -51,12 +53,15 @@ def _run_capture(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    attempted = sent = 0
+    main_attempted = main_sent = store_attempted = store_sent = 0
     webhook_path = args.webhook or pool_path.with_name("wechat_webhook.txt")
     if webhook_path.exists():
         try:
-            attempted, sent = process_notifications(
-                getattr(capture_result, "orders", ()), webhook_path
+            store_notify = not getattr(args, "no_store_notify", False)
+            main_attempted, main_sent, store_attempted, store_sent = process_notifications(
+                getattr(capture_result, "orders", ()), webhook_path,
+                store_notify=store_notify,
+                store_configs_path=getattr(args, "store_config", None),
             )
         except Exception:
             print("采集和订单池已完成，但企微推送失败：请检查 Webhook 配置和网络。", file=sys.stderr)
@@ -64,7 +69,8 @@ def _run_capture(args: argparse.Namespace) -> int:
 
     print(
         f"采集完成：{capture_result.pages} 页，{capture_result.responses} 个响应；"
-        f"订单池 {pool_result.unique_orders} 笔，已写入 {pool_result.output_path}；企微推送 {sent}/{attempted} 笔。"
+        f"订单池 {pool_result.unique_orders} 笔，已写入 {pool_result.output_path}；"
+        f"主推送 {main_sent}/{main_attempted} 笔，门店推送 {store_sent}/{store_attempted} 笔。"
     )
     return 0
 

@@ -166,6 +166,6 @@ def test_main_capture_reports_counts_without_response_or_cookie_content(
     assert exit_code == 0
     captured = capsys.readouterr()
     assert captured.out == (
-        f"采集完成：2 页，2 个响应；订单池 3 笔，已写入 {pool_path}；企微推送 0/0 笔。\n"
+        f"采集完成：2 页，2 个响应；订单池 3 笔，已写入 {pool_path}；主推送 0/0 笔，门店推送 0/0 笔。\n"
     )
     assert captured.err == ""

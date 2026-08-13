@@ -54,3 +54,52 @@
 ```
 
 `raw_order_responses.jsonl` 和 `order_pool.json` 都包含完整的客户与订单信息，只能保存在本机：不得提交到 Git，也不得发送到聊天、邮件或其他外部渠道。
+
+## 门店群推送
+
+除了主企微推送外，支持按门店名将订单推送到对应门店群。
+
+### 配置文件
+
+配置文件位于 `config/store_webhooks.json`，格式如下：
+
+```json
+[
+  {
+    "门店名": "门店名称（与订单 stationName 字段精确匹配）",
+    "营业开始时间": "09:30:00",
+    "营业结束时间": "22:00:00",
+    "webhook": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+  }
+]
+```
+
+- `门店名`：必须与订单中的 `stationName` 字段精确匹配
+- `营业开始时间` / `营业结束时间`：可选，格式为 `HH:MM:SS`，支持跨午夜（如 `22:00:00` - `06:00:00`）
+- `webhook`：该门店群的企业微信机器人 webhook 地址
+
+### 使用方式
+
+默认情况下，门店群推送功能是启用的：
+
+```bash
+.venv/bin/python -m jd_monitor capture
+```
+
+如需禁用门店群推送，使用 `--no-store-notify` 参数：
+
+```bash
+.venv/bin/python -m jd_monitor capture --no-store-notify
+```
+
+可使用 `--store-config` 指定自定义配置文件路径：
+
+```bash
+.venv/bin/python -m jd_monitor capture --store-config /path/to/config.json
+```
+
+### 推送逻辑
+
+1. 订单 `stationName` 字段与配置中 `门店名` 精确匹配时，额外推送到该门店群
+2. 仅在营业时间内推送（未配置营业时间则始终推送）
+3. 主推送和门店推送独立控制，互不影响
