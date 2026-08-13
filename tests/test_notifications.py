@@ -98,4 +98,8 @@ def test_format_store_config_confirmation():
     assert "门店名称：华为授权体验店（悦荟广场店）" in message
     assert "营业时间：09:30 ~ 22:00" in message
     assert "推送平台：京东到家订单监控" in message
+    assert "推送机制：" in message
+    assert "频率：每分钟 1 次" in message
+    assert "待接单：距 deadline 6 分钟内" in message
+    assert "待拣货：距 deadline 6 分钟内" in message
     assert "状态：配置完成，正常推送中" in message

@@ -94,6 +94,11 @@ def format_store_config_confirmation(config: StoreConfig, platform_name: str = "
 营业时间：{start} ~ {end}
 推送平台：{platform_name}
 ————————————
+推送机制：
+- 频率：每分钟 1 次
+- 待接单：距 deadline 6 分钟内
+- 待拣货：距 deadline 6 分钟内
+————————————
 状态：配置完成，正常推送中"""
 
 
