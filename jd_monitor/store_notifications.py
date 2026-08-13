@@ -83,6 +83,20 @@ def format_store_notification(order: dict[str, object], title: str, store_name: 
     )
 
 
+def format_store_config_confirmation(config: StoreConfig, platform_name: str = "京东到家订单监控") -> str:
+    """Format store config confirmation message for testing."""
+    start = config.start_time.strftime("%H:%M") if config.start_time else "未设置"
+    end = config.end_time.strftime("%H:%M") if config.end_time else "未设置"
+
+    return f"""【京东到家】门店推送配置确认
+————————————
+门店名称：{config.store_name}
+营业时间：{start} ~ {end}
+推送平台：{platform_name}
+————————————
+状态：配置完成，正常推送中"""
+
+
 def send_to_store_groups(
     orders: list[tuple[dict[str, object], str]],
     configs: list[StoreConfig],

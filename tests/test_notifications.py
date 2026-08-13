@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 
 from jd_monitor.notifications import eligible_orders, format_notification
-from jd_monitor.store_notifications import StoreConfig, load_store_configs, format_store_notification
+from jd_monitor.store_notifications import StoreConfig, load_store_configs, format_store_notification, format_store_config_confirmation
 
 
 def test_eligible_orders_selects_orders_within_six_minutes_of_deadline():
@@ -79,3 +79,21 @@ def test_format_store_notification():
     assert "门店：测试门店" in message
     assert "订单号：o2o-456" in message
     assert "商品A、商品B" in message
+
+
+def test_format_store_config_confirmation():
+    config = StoreConfig(
+        store_name="华为授权体验店（悦荟广场店）",
+        start_time="09:30:00",
+        end_time="22:00:00",
+        webhook_url="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test123"
+    )
+
+    message = format_store_config_confirmation(config)
+
+    assert "【京东到家】门店推送配置确认" in message
+    assert "————————————" in message
+    assert "门店名称：华为授权体验店（悦荟广场店）" in message
+    assert "营业时间：09:30 ~ 22:00" in message
+    assert "推送平台：京东到家订单监控" in message
+    assert "状态：配置完成，正常推送中" in message
