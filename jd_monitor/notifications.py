@@ -67,7 +67,7 @@ def format_notification(order: dict[str, object], title: str) -> str:
         for item in products[:3]
         if isinstance(item, dict)
     ) or "商品信息待确认"
-    return "{}\n订单号：{}\n门店：{}\n下单时间：{}\n商品：{}".format(
+    return "【京东到家】{}\n订单号：{}\n门店：{}\n下单时间：{}\n商品：{}".format(
         title,
         order.get("o2oOrderId", order.get("orderId", "")),
         order.get("stationName", ""),

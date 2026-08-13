@@ -27,6 +27,7 @@ def test_notification_uses_o2o_order_id_and_omits_status_number():
         "listOrderinfoproduct": [{"skuName": "商品"}],
     }, "待接单")
 
+    assert "【京东到家】待接单" in message
     assert "订单号：o2o-123" in message
     assert "状态：" not in message
 
@@ -76,6 +77,7 @@ def test_format_store_notification():
     }
 
     message = format_store_notification(order, "待接单", "测试门店")
+    assert "【京东到家】待接单" in message
     assert "门店：测试门店" in message
     assert "订单号：o2o-456" in message
     assert "商品A、商品B" in message
